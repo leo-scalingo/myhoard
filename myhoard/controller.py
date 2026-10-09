@@ -850,7 +850,7 @@ class Controller(threading.Thread):
             }
             change_replication_source_to(cursor=cursor, options=options)
             cursor.execute("START REPLICA SQL_THREAD")
-            expected_file = self._relay_log_name(index=first_index + len(to_apply), full_path=False)
+            expected_file = self._relay_log_name(index=first_index + len(to_apply) -1, full_path=False)
             expected_ranges_str = make_gtid_range_string(expected_ranges)
             self.log.info(
                 "Started SQL thread, waiting for file %r and GTID range %r to be reached", expected_file, expected_ranges_str
