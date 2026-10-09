@@ -39,6 +39,42 @@ class CountDict(TypedDict):
     count: int
 
 
+@pytest.mark.parametrize(
+    "replica_status",
+    [
+        None,
+        {"Relay_Log_File": "", "Relay_Source_Log_File": "", "Exec_Source_Log_Pos": 0, "Retrieved_Gtid_Set": ""},
+    ],
+)
+def test_apply_downloaded_remote_binlogs_uses_configured_relay_log_prefix(tmp_path, replica_status):
+    # pylint: disable=protected-access
+    prefetch_file = tmp_path / "prefetch.binlog"
+    prefetch_file.write_bytes(b"binlog content")
+    binlogs = [{"local_prefetch_name": str(prefetch_file), "gtid_ranges": []}]
+    controller = Controller.__new__(Controller)
+    controller.mysql_client_params = {}
+    controller.mysql_relay_log_prefix = str(tmp_path / "custom.relay")
+    controller.mysql_relay_log_index_file = str(tmp_path / "custom.relay.index")
+    controller.log = MagicMock()
+    controller.state = {"promote_details": {"binlogs_to_apply": binlogs}}
+    controller.state_manager = MagicMock()
+    controller.state_manager.update_state.side_effect = controller.state.update
+
+    cursor_cm = MagicMock()
+    cursor = cursor_cm.__enter__.return_value
+    cursor.fetchone.return_value = replica_status
+    with patch("myhoard.controller.mysql_cursor", return_value=cursor_cm):
+        controller._apply_downloaded_remote_binlogs()
+
+    cursor.execute.assert_any_call(
+        "CHANGE REPLICATION SOURCE TO SOURCE_AUTO_POSITION=0, SOURCE_HOST='dummy', "
+        "PRIVILEGE_CHECKS_USER=NULL, RELAY_LOG_FILE='custom.relay.000001', RELAY_LOG_POS=4"
+    )
+    assert (tmp_path / "custom.relay.000001").read_bytes() == b"binlog content"
+    assert (tmp_path / "custom.relay.index").read_text() == "custom.relay.000001\n"
+    assert controller.state["promote_details"]["expected_file"] == "custom.relay.000002"
+
+
 def test_old_master_has_failed(default_backup_site, master_controller, mysql_empty, session_tmpdir):
     """Create a master and take backup, ensure some binary logs are created. Start new empty server
     and restore that from backup and promote as new master immediate to simulate scenario where old

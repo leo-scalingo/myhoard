@@ -796,7 +796,7 @@ class Controller(threading.Thread):
             else:
                 first_name = replica_status["Relay_Log_File"]
             if not first_name:
-                first_name = "relay.000001"
+                first_name = self._relay_log_name(index=1, full_path=False)
             if not self.state["promote_details"].get("relay_index_updated"):
                 first_index = int(first_name.split(".")[-1])
                 if first_index == 1 and (
